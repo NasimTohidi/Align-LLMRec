@@ -14,7 +14,7 @@ def info_nce_loss(features1, features2, temperature):
 
 def warm_cold_alignment_loss(u_t, e_i, is_warm_mask, tau):
     """
-    Implements the sentiment-aware warm-cold contrastive objective (Eq. 4).
+    Implements the sentiment-aware warm-cold contrastive objective.
     Separately aligns user preference with warm and cold item representations.
     """
     # Use lambda > 0 (handled by coefficient in main loss) to balance contributions
@@ -64,4 +64,5 @@ def train_stage_1_epoch(model, dataloader, optimizer, device):
         optimizer.step()
         total_loss += loss.item()
         
+
     return total_loss / len(dataloader)
