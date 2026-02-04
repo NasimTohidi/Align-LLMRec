@@ -1,9 +1,10 @@
 def construct_align_prompt(user_pref_emb, history_item_embs, candidate_item_embs):
     """
-    Implements the Latent-to-text prompting[cite: 580].
+    Implements the Latent-to-text prompting.
     """
     prompt = f"Input: {user_pref_emb} is a user representation. "
     prompt += f"This user interacted with {history_item_embs} in the past. "
     prompt += f"Task: Recommend an item to this user from this list {candidate_item_embs}. "
     prompt += "Output: Next item"
+
     return prompt
