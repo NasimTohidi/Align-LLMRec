@@ -16,7 +16,7 @@ class AmazonMusicDataset(Dataset):
         
         self.max_len = max_len
         
-        # SBERT for metadata, DistilBERT for reviews [cite: 210, 383]
+        # SBERT for metadata, DistilBERT for reviews
         self.tokenizer_meta = AutoTokenizer.from_pretrained('sentence-transformers/all-MiniLM-L6-v2')
         self.tokenizer_rev = AutoTokenizer.from_pretrained('distilbert-base-uncased')
 
@@ -36,7 +36,7 @@ class AmazonMusicDataset(Dataset):
     def extract_sentiment_score(self, text):
         """Generate the explicit sentiment label s in {0,1}."""
         analysis = TextBlob(text)
-        # s=1 for positive, s=0 for negative [cite: 374]
+        # s=1 for positive, s=0 for negative
         return [1.0] if analysis.sentiment.polarity > 0 else [0.0]
 
     def __len__(self):
@@ -57,12 +57,13 @@ class AmazonMusicDataset(Dataset):
         review_text = str(row.get('reviewText', ''))
         s = self.extract_sentiment_score(review_text) 
 
-        # Return dict with all components needed for Stage I multi-task loss [cite: 509]
+        # Return dict with all components needed for Stage I multi-task loss
         return {
-            'seq': torch.tensor(row['history'][-self.max_len:]), # sequential history [cite: 373]
+            'seq': torch.tensor(row['history'][-self.max_len:]), # sequential history
             'target_item': torch.tensor(row['target']),
             'meta_text': meta_text,
             'review_text': review_text,
-            'sentiment_s': torch.tensor(s, dtype=torch.float32), # Eq. 1 
-            'is_warm': torch.tensor(1 if row.get('freq', 0) > 10 else 0) # For CL_w/c [cite: 616, 620]
+            'sentiment_s': torch.tensor(s, dtype=torch.float32), 
+            'is_warm': torch.tensor(1 if row.get('freq', 0) > 10 else 0) # For CL_w/c
+
         }
