@@ -35,7 +35,7 @@ def get_dynamic_warm_cold_partition(df, days_threshold=30):
     # 3. Calculate recent frequencies
     counts = recent_interactions['asin'].value_counts()
     
-    # 4. Partition items based on Eq. 4 requirements
+    # 4. Partition items based on requirements
     # Warm items: > 10 interactions in the past 30 days
     warm_items = counts[counts > 10].index.tolist()
     # Cold items: <= 3 interactions in the past 30 days
@@ -69,3 +69,4 @@ def generate_sequential_data(df, max_len=10):
             
 
     return pd.DataFrame(sequences)
+
