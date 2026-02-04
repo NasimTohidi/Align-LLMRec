@@ -9,7 +9,7 @@
 
 ---
 
-## 🏗️ Architecture
+## Architecture
 Align-LLMRec is a hybrid CF-LLM framework that integrates parallel encoding paths for user interactions, item metadata, and reviews. The system is built upon three core pillars:
 
 ### **1. Cross-attention Fusion**
