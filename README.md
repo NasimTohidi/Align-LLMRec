@@ -10,7 +10,7 @@
 ---
 
 ## Structure
-Based on the architecture described in the paper:
+The structure of this project is:
 ```text
 Align-LLMRec/
 ├── data/               # Processing for Amazon Music, Books, and Electronics 
