@@ -3,7 +3,7 @@ import torch.nn as nn
 
 def train_stage_2(model, llm, dataloader, optimizer, device):
     """
-    Implements Stage II: LLM-compatible embedding alignment[cite: 514].
+    Implements Stage II: LLM-compatible embedding alignment.
     Freezes Stage I components and trains only the lightweight projection interface.
     """
     # 1. Ensure all Stage I components (CF backbone, textual encoders) are frozen 
@@ -23,7 +23,7 @@ def train_stage_2(model, llm, dataloader, optimizer, device):
     for batch in dataloader:
         optimizer.zero_grad()
         
-        # Move inputs to device (GPU recommended)
+        # Move inputs to device (GPU)
         u_t = batch['u_t'].to(device) # User preference embedding from Stage I
         e_i = batch['e_i'].to(device) # Sentiment-aware item representation from Stage I 
         
@@ -34,7 +34,7 @@ def train_stage_2(model, llm, dataloader, optimizer, device):
         
         # 4. Construct soft-token prompt 
         # Injects the continuous projected embeddings into the task-specific template 
-        # The template follows the Latent-to-text pattern illustrated in Figure 4 
+        # The Latent-to-text pattern 
         inputs_embeds = model.construct_soft_prompt(batch['text_prompts'], u_p, i_p)
         
         # 5. Compute LLM Likelihood (Negative Log-Likelihood) 
@@ -42,12 +42,13 @@ def train_stage_2(model, llm, dataloader, optimizer, device):
         outputs = llm(inputs_embeds=inputs_embeds, labels=batch['target_ids'])
         nll_loss = outputs.loss 
         
-        # 6. Add Projector Regularization (Eq. 7) to prevent projection collapse 
+        # 6. Add Projector Regularization to prevent projection collapse 
         # This term prevents the model from overfitting to the sparse training signals 
         reg_loss = gamma1 * torch.norm(u_p, p=2) + gamma2 * torch.norm(i_p, p=2)
 
-        # 7. Final Projector Alignment Loss for Stage II (Eq. 7)
+        # 7. Final Projector Alignment Loss for Stage II
         l_proj = nll_loss + reg_loss
     
         l_proj.backward()
+
         optimizer.step()
