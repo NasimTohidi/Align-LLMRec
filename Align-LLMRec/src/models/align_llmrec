@@ -1,0 +1,53 @@
+import torch
+import torch.nn as nn
+
+class AlignLLMRec(nn.Module):
+    def __init__(self, item_count, d_model=256, llm_dim=4096):
+        super().__init__()
+        self.d_model = d_model
+
+        # ... existing CF backbone ...
+        self.W_T = nn.Linear(768, d_model)   # Metadata Projection
+        self.W_R = nn.Linear(769, d_model)   # Review (768) + Sentiment s (1)
+        self.cross_attn = nn.MultiheadAttention(d_model, num_heads=4, batch_first=True)
+        
+        # 1. Sequential CF Backbone (SASRec)
+        self.item_emb = nn.Embedding(item_count + 1, d_model, padding_idx=0)
+        self.cf_backbone = nn.TransformerEncoderLayer(d_model, nhead=4, batch_first=True)
+        
+        # 2. Dual-View Textual Projections (Eq. 1)
+        self.W_T = nn.Linear(768, d_model) # Metadata (SBERT)
+        self.W_R = nn.Linear(768 + 1, d_model) # Review (DistilBERT) + Sentiment 's'
+        
+        # 3. Cross-Attention Fusion (Eq. 2)
+        self.cross_attention = nn.MultiheadAttention(d_model, num_heads=4, batch_first=True)
+        
+        # 4. Stage II: Latent-to-Text Projectors (Eq. 7)
+        self.u_proj = nn.Sequential(nn.Linear(d_model, llm_dim), nn.ReLU(), nn.Linear(llm_dim, llm_dim))
+        self.i_proj = nn.Sequential(nn.Linear(d_model, llm_dim), nn.ReLU(), nn.Linear(llm_dim, llm_dim))
+
+    def fuse_semantic_affective(self, m_T, m_R_with_s):
+        """
+        Implements m = CrossAttn(m_T, m_R) [cite: 389]
+        m_T: Semantic cues (Query)
+        m_R_with_s: Affective cues (Key/Value)
+        """
+        m_T_proj = torch.relu(self.W_T(m_T))
+        m_R_proj = torch.relu(self.W_R(m_R_with_s))
+        
+        # Query from Metadata, Key/Value from Reviews
+        fused_m, _ = self.cross_attention(m_T_proj, m_R_proj, m_R_proj)
+        return fused_m
+
+    def forward_textual_fusion(self, sbert_meta, distilbert_review, sentiment_s):
+        # m^T = ReLU(W_T * SBERT + b_T) 
+        m_T = torch.relu(self.W_T(sbert_meta)) 
+        
+        # m^R = ReLU(W_R * [DistilBERT; s] + b_R) 
+        review_input = torch.cat([distilbert_review, sentiment_s], dim=-1)
+        m_R = torch.relu(self.W_R(review_input))
+        
+        # m = CrossAttn(m_T, m_R) [cite: 389]
+        # Query: Metadata, Key/Value: Review
+        fused_m, _ = self.cross_attn(m_T.unsqueeze(1), m_R.unsqueeze(1), m_R.unsqueeze(1))
+        return fused_m.squeeze(1)

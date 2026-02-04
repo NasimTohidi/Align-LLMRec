@@ -1,0 +1,67 @@
+import torch
+import torch.nn as nn
+from src.models.align_llmrec import AlignLLMRec
+
+def info_nce_loss(features1, features2, temperature):
+    """Standard InfoNCE implementation for multimodal alignment."""
+    # Normalize features to prevent gradients from exploding
+    features1 = nn.functional.normalize(features1, dim=-1)
+    features2 = nn.functional.normalize(features2, dim=-1)
+    
+    logits = torch.matmul(features1, features2.T) / temperature
+    labels = torch.arange(features1.size(0)).to(features1.device)
+    return nn.CrossEntropyLoss()(logits, labels)
+
+def warm_cold_alignment_loss(u_t, e_i, is_warm_mask, tau):
+    """
+    Implements the sentiment-aware warm-cold contrastive objective (Eq. 4).
+    Separately aligns user preference with warm and cold item representations.
+    """
+    # Use lambda > 0 (handled by coefficient in main loss) to balance contributions
+    # Partitioned based on Eq. 4 requirements 
+    warm_loss = info_nce_loss(u_t[is_warm_mask], e_i[is_warm_mask], tau) if is_warm_mask.any() else 0
+    cold_loss = info_nce_loss(u_t[~is_warm_mask], e_i[~is_warm_mask], tau) if (~is_warm_mask).any() else 0
+    return warm_loss + cold_loss
+
+def train_stage_1_epoch(model, dataloader, optimizer, device):
+    """
+    Implements the full Stage I training logic (Eq. 6).
+    """
+    model.train()
+    total_loss = 0
+    
+    # Coefficients and temperatures optimized for Amazon Music 
+    lambda1, lambda2 = 0.3, 0.4 
+    tau_wc, tau_match = 0.05, 0.07
+
+    for batch in dataloader:
+        optimizer.zero_grad()
+        
+        # 1. Collaborative Preference & Textual Fusion
+        # Extract user (u_t) and item (e_i) embeddings from Stage I components 
+        u_t, e_i = model.forward_stage1(batch['seq'].to(device), batch['target_item'].to(device))
+        
+        # m = CrossAttn(m^T, m^R) with metadata as Query 
+        m_fused = model.fuse_text(batch['meta'].to(device), batch['review'].to(device), batch['sentiment_s'].to(device))
+
+        # 2. Recommendation Loss (Eq. 5)
+        # Use Binary Cross-Entropy with L2 regularization 
+        logits_rec = torch.matmul(u_t, e_i.T) 
+        l_rec = nn.BCEWithLogitsLoss()(logits_rec, batch['label'].to(device))
+
+        # 3. Match Loss (Eq. 3)
+        # Aligns CF item embeddings with fused Textual/Sentiment representations 
+        l_match = info_nce_loss(e_i, m_fused, tau_match) 
+
+        # 4. Warm-Cold Loss (Eq. 4)
+        # Dynamically partitions items to handle data sparsity 
+        l_wc = warm_cold_alignment_loss(u_t, e_i, batch['is_warm'].to(device), tau_wc)
+
+        # Final Stage I Multi-task Objective 
+        loss = l_rec + lambda1 * l_wc + lambda2 * l_match
+        
+        loss.backward()
+        optimizer.step()
+        total_loss += loss.item()
+        
+    return total_loss / len(dataloader)

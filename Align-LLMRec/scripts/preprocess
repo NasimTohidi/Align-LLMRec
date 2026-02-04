@@ -1,0 +1,70 @@
+import pandas as pd
+
+def apply_5core_filtering(df):
+    """
+    Standard 5-core filtering as per Section 5 of the paper.
+    Iteratively retains only users and items with at least 5 interactions.
+    """
+    while True:
+        user_counts = df['user_id'].value_counts()
+        item_counts = df['asin'].value_counts()
+        # Identify users and items that meet the 5-core threshold 
+        mask = df['user_id'].isin(user_counts[user_counts >= 5].index) & \
+               df['asin'].isin(item_counts[item_counts >= 5].index)
+        
+        new_df = df[mask]
+        # If no more changes are needed, break the loop
+        if len(new_df) == len(df):
+            break
+        df = new_df
+    return df
+
+def get_dynamic_warm_cold_partition(df, days_threshold=30):
+    """
+    Implements the temporally adaptive partitioning strategy (Section 5).
+    Classifies items based on recent interaction frequency [cite: 615-616].
+    """
+    # 1. Convert timestamps to datetime if not already done
+    df['timestamp'] = pd.to_datetime(df['timestamp'], unit='s')
+    
+    # 2. Define the 'recent' window (past 30 days of the dataset) 
+    max_date = df['timestamp'].max()
+    recent_window = max_date - pd.Timedelta(days=days_threshold)
+    recent_interactions = df[df['timestamp'] >= recent_window]
+    
+    # 3. Calculate recent frequencies
+    counts = recent_interactions['asin'].value_counts()
+    
+    # 4. Partition items based on Eq. 4 requirements [cite: 620-621]
+    # Warm items: > 10 interactions in the past 30 days
+    warm_items = counts[counts > 10].index.tolist()
+    # Cold items: <= 3 interactions in the past 30 days
+    cold_items = counts[counts <= 3].index.tolist()
+    
+    return warm_items, cold_items
+
+def generate_sequential_data(df, max_len=10):
+    """
+    Converts interaction logs into sequences (S^u) for the CF backbone.
+    Each user associated with a temporal sequence v_1 to v_t[cite: 373].
+    """
+    df = df.sort_values(['user_id', 'timestamp'])
+    sequences = []
+    
+    for user_id, group in df.groupby('user_id'):
+        items = group['asin'].tolist()
+        if len(items) < 2:
+            continue
+            
+        # Create (history, target) pairs for sequential training [cite: 377]
+        for i in range(1, len(items)):
+            history = items[max(0, i - max_len):i]
+            target = items[i]
+            sequences.append({
+                'user_id': user_id,
+                'history': history,
+                'target': target,
+                'timestamp': group.iloc[i]['timestamp']
+            })
+            
+    return pd.DataFrame(sequences)

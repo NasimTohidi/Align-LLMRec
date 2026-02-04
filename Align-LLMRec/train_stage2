@@ -1,0 +1,53 @@
+import torch
+import torch.nn as nn
+
+def train_stage_2(model, llm, dataloader, optimizer, device):
+    """
+    Implements Stage II: LLM-compatible embedding alignment[cite: 514].
+    Freezes Stage I components and trains only the lightweight projection interface.
+    """
+    # 1. Ensure all Stage I components (CF backbone, textual encoders) are frozen 
+    model.eval() 
+    for param in model.parameters():
+        param.requires_grad = False
+        
+    # 2. Unfreeze only the projection MLPs (Phi and Psi) for training 
+    for param in model.u_proj.parameters():
+        param.requires_grad = True
+    for param in model.i_proj.parameters():
+        param.requires_grad = True
+
+    # Regularization weights from paper (Section 4.2) 
+    gamma1, gamma2 = 0.01, 0.01 
+
+    for batch in dataloader:
+        optimizer.zero_grad()
+        
+        # Move inputs to device (GPU recommended)
+        u_t = batch['u_t'].to(device) # User preference embedding from Stage I
+        e_i = batch['e_i'].to(device) # Sentiment-aware item representation from Stage I 
+        
+        # 3. Project Stage I embeddings into the LLM-compatible latent space
+        # These projected representations act as soft prompt tokens
+        u_p = model.u_proj(u_t) # PMLP(u_t) 
+        i_p = model.i_proj(e_i) # MLP(m_i) 
+        
+        # 4. Construct soft-token prompt 
+        # Injects the continuous projected embeddings into the task-specific template 
+        # The template follows the Latent-to-text pattern illustrated in Figure 4 
+        inputs_embeds = model.construct_soft_prompt(batch['text_prompts'], u_p, i_p)
+        
+        # 5. Compute LLM Likelihood (Negative Log-Likelihood) 
+        # Calculate -log P_LLM(v | Prompt) conditioned on the prompt
+        outputs = llm(inputs_embeds=inputs_embeds, labels=batch['target_ids'])
+        nll_loss = outputs.loss 
+        
+        # 6. Add Projector Regularization (Eq. 7) to prevent projection collapse 
+        # This term prevents the model from overfitting to the sparse training signals 
+        reg_loss = gamma1 * torch.norm(u_p, p=2) + gamma2 * torch.norm(i_p, p=2)
+
+        # 7. Final Projector Alignment Loss for Stage II (Eq. 7)
+        l_proj = nll_loss + reg_loss
+    
+        l_proj.backward()
+        optimizer.step()
