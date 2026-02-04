@@ -18,7 +18,7 @@ def warm_cold_alignment_loss(u_t, e_i, is_warm_mask, tau):
     Separately aligns user preference with warm and cold item representations.
     """
     # Use lambda > 0 (handled by coefficient in main loss) to balance contributions
-    # Partitioned based on Eq. 4 requirements 
+    # Partitioned based on requirements 
     warm_loss = info_nce_loss(u_t[is_warm_mask], e_i[is_warm_mask], tau) if is_warm_mask.any() else 0
     cold_loss = info_nce_loss(u_t[~is_warm_mask], e_i[~is_warm_mask], tau) if (~is_warm_mask).any() else 0
     return warm_loss + cold_loss
@@ -44,16 +44,16 @@ def train_stage_1_epoch(model, dataloader, optimizer, device):
         # m = CrossAttn(m^T, m^R) with metadata as Query 
         m_fused = model.fuse_text(batch['meta'].to(device), batch['review'].to(device), batch['sentiment_s'].to(device))
 
-        # 2. Recommendation Loss (Eq. 5)
+        # 2. Recommendation Loss
         # Use Binary Cross-Entropy with L2 regularization 
         logits_rec = torch.matmul(u_t, e_i.T) 
         l_rec = nn.BCEWithLogitsLoss()(logits_rec, batch['label'].to(device))
 
-        # 3. Match Loss (Eq. 3)
+        # 3. Matching Loss
         # Aligns CF item embeddings with fused Textual/Sentiment representations 
         l_match = info_nce_loss(e_i, m_fused, tau_match) 
 
-        # 4. Warm-Cold Loss (Eq. 4)
+        # 4. Warm/Cold Loss
         # Dynamically partitions items to handle data sparsity 
         l_wc = warm_cold_alignment_loss(u_t, e_i, batch['is_warm'].to(device), tau_wc)
 
@@ -66,3 +66,4 @@ def train_stage_1_epoch(model, dataloader, optimizer, device):
         
 
     return total_loss / len(dataloader)
+
