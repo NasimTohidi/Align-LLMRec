@@ -1,12 +1,22 @@
-#Align-LLMRec: Semantic Alignment for Prompt-based Recommendations with LLMs
+# Align-LLMRec: Semantic Alignment for Prompt-based Recommendations with LLMs
 
-**Overview
-Align-LLMRec is a unified recommendation framework that integrates classical collaborative filtering (CF) with the reasoning capabilities of Large Language Models (LLMs). It specifically addresses:
-Information Under-utilization: Leverages item metadata and user-generated review sentiment.
-Cold-Start & Sparsity: Uses contrastive alignment to produce robust embeddings even for items with limited history.
-Reasoning: Employs an LLM-compatible embedding interface for interpretable, prompt-based recommendations.
 
-**Architecture
-The framework operates in two distinct training stages:
-Stage I (Representation Learning): Jointly optimizes a sequential CF backbone with SBERT (metadata) and DistilBERT (reviews) encoders using a cross-attention fusion mechanism.
-Stage II (LLM Alignment): Trains a lightweight projection interface to map learned embeddings into the latent space of a frozen LLM.
+## Overview
+**Align-LLMRec** addresses three fundamental challenges in modern recommendation systems:
+* **Information Under-utilization**: Jointly models interaction data with semantic signals from item metadata and user reviews.
+* **Cold-start Problem**: Enhances performance for new or rare items using contrastive learning and semantic alignment.
+* **Sparse/Noisy Data**: Leverages LLMs and denoised representations to provide robust, context-aware predictions.
+
+---
+
+## Structure
+Based on the architecture described in the paper:
+```text
+Align-LLMRec/
+├── data/               # Processing for Amazon Music, Books, and Electronics 
+├── models/             # SBERT, DistilBERT, and Transformer CF Backbone 
+├── stages/
+│   ├── stage1_rec.py   # Sentiment-aware representation learning 
+│   └── stage2_llm.py   # LLM-compatible embedding alignment 
+├── utils/              # Contrastive loss and cross-attention fusion 
+└── requirements.txt    # Dependencies (PyTorch, Transformers, etc.)
